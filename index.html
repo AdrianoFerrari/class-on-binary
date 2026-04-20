@@ -17,20 +17,60 @@
     }
 
     header {
-      padding: 12px 20px;
+      padding: 10px 20px;
       background: #16213e;
       border-bottom: 1px solid #0f3460;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    header .title {
       font-size: 1.1rem;
       font-weight: bold;
       color: #e94560;
       letter-spacing: 2px;
     }
 
+    .mode-toggle {
+      display: flex;
+      border: 1px solid #e94560;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .mode-toggle button {
+      padding: 5px 14px;
+      background: transparent;
+      color: #888;
+      border: none;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 0.8rem;
+      letter-spacing: 1px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .mode-toggle button.active {
+      background: #e94560;
+      color: #fff;
+      font-weight: bold;
+    }
+
+    .mode-toggle button:not(.active):hover {
+      background: #1f1f3a;
+      color: #e0e0e0;
+    }
+
+    .mode-hint {
+      font-size: 0.72rem;
+      color: #555;
+    }
+
     .main {
       display: flex;
       flex: 1;
       overflow: hidden;
-      gap: 0;
     }
 
     .panel {
@@ -42,9 +82,7 @@
       gap: 12px;
     }
 
-    .panel-left {
-      border-right: 2px solid #0f3460;
-    }
+    .panel-left { border-right: 2px solid #0f3460; }
 
     .label {
       font-size: 0.75rem;
@@ -54,10 +92,8 @@
       margin-bottom: 4px;
     }
 
-    textarea#binary-input {
+    textarea {
       width: 100%;
-      flex: 1;
-      min-height: 300px;
       background: #0d0d1a;
       color: #00ff88;
       border: 1px solid #0f3460;
@@ -65,39 +101,29 @@
       padding: 12px;
       font-family: monospace;
       font-size: 1rem;
-      resize: vertical;
       outline: none;
       line-height: 1.6;
+      resize: vertical;
+      transition: border-color 0.2s;
     }
 
-    textarea#binary-input:focus {
-      border-color: #e94560;
+    textarea:focus { border-color: #e94560; }
+
+    textarea[readonly] {
+      opacity: 0.55;
+      cursor: default;
     }
+
+    #binary-input { flex: 1; min-height: 300px; }
+    #ascii-textarea { min-height: 80px; }
 
     .stats {
       font-size: 0.75rem;
       color: #666;
     }
+    .stats span { color: #00ff88; }
 
-    .stats span {
-      color: #00ff88;
-    }
-
-    /* ASCII output */
-    #ascii-output {
-      background: #0d0d1a;
-      border: 1px solid #0f3460;
-      border-radius: 4px;
-      padding: 12px;
-      min-height: 80px;
-      word-break: break-all;
-      white-space: pre-wrap;
-      font-size: 1rem;
-      color: #f0c040;
-      line-height: 1.6;
-    }
-
-    /* Pixel grid */
+    /* Pixel grid controls */
     .pixel-controls {
       display: flex;
       align-items: center;
@@ -105,10 +131,7 @@
       flex-wrap: wrap;
     }
 
-    .pixel-controls label {
-      font-size: 0.75rem;
-      color: #888;
-    }
+    .pixel-controls label { font-size: 0.75rem; color: #888; }
 
     .pixel-controls input[type=range] {
       accent-color: #e94560;
@@ -126,7 +149,8 @@
       font-size: 0.85rem;
     }
 
-    #pixel-canvas-wrapper {
+    /* Pixel grid wrapper */
+    #pixel-grid-wrapper {
       background: #0d0d1a;
       border: 1px solid #0f3460;
       border-radius: 4px;
@@ -134,30 +158,55 @@
       overflow: auto;
       flex: 1;
       min-height: 120px;
-      display: flex;
-      align-items: flex-start;
+      transition: border-color 0.2s;
     }
 
-    #pixel-canvas {
-      image-rendering: pixelated;
-      display: block;
+    #pixel-grid-wrapper.interactive { border-color: #e94560; }
+
+    /* The grid itself: a flex-wrap row of pixel divs */
+    #pixel-grid {
+      display: flex;
+      flex-wrap: wrap;
+      /* width is set inline to match imgWidth * cellSize */
     }
+
+    .pixel {
+      flex-shrink: 0;
+      background: #000;
+    }
+
+    .pixel.on  { background: #fff; }
+    .pixel.pad { background: #1a1a2e; }
+
+    #pixel-grid-wrapper.interactive .pixel:not(.pad) {
+      cursor: crosshair;
+    }
+
+    .canvas-hint {
+      font-size: 0.7rem;
+      color: #555;
+      transition: color 0.2s;
+    }
+    .canvas-hint.active { color: #e94560; }
   </style>
 </head>
 <body>
 
-<header>BINARY EXPLORER</header>
+<header>
+  <div class="title">BINARY EXPLORER</div>
+  <div class="mode-toggle">
+    <button id="btn-receiving" class="active" onclick="setMode('receiving')">RECEIVING</button>
+    <button id="btn-sending" onclick="setMode('sending')">SENDING</button>
+  </div>
+  <div class="mode-hint" id="mode-hint">Edit binary → see decoded output</div>
+</header>
 
 <div class="main">
 
-  <!-- LEFT: Binary Input -->
+  <!-- LEFT: Binary -->
   <div class="panel panel-left">
-    <div class="label">Binary Input</div>
-    <textarea
-      id="binary-input"
-      spellcheck="false"
-      placeholder="Type 0s and 1s here..."
-    ></textarea>
+    <div class="label">Binary</div>
+    <textarea id="binary-input" spellcheck="false" placeholder="Type 0s and 1s here..."></textarea>
     <div class="stats">
       Bits: <span id="stat-bits">0</span> &nbsp;|&nbsp;
       Bytes: <span id="stat-bytes">0</span> &nbsp;|&nbsp;
@@ -168,126 +217,248 @@
   <!-- RIGHT: Outputs -->
   <div class="panel panel-right">
 
-    <!-- ASCII -->
     <div class="label">ASCII Text (8 bits per character)</div>
-    <div id="ascii-output"></div>
+    <textarea id="ascii-textarea" spellcheck="false" placeholder="ASCII text here..."></textarea>
 
-    <!-- Pixel image -->
-    <div class="label">Pixel Image</div>
+    <div class="label">
+      Pixel Image
+      <span class="canvas-hint" id="canvas-hint">&nbsp;</span>
+    </div>
     <div class="pixel-controls">
-      <label>Width (px):
+      <label>Width:
         <input type="number" id="img-width" value="8" min="1" max="512">
+      </label>
+      <label id="img-height-label">Height:
+        <input type="number" id="img-height" value="8" min="1" max="512">
       </label>
       <label>Cell size:
         <input type="range" id="cell-size" min="2" max="32" value="12">
         <span id="cell-size-val">12</span>px
       </label>
     </div>
-    <div id="pixel-canvas-wrapper">
-      <canvas id="pixel-canvas"></canvas>
+    <div id="pixel-grid-wrapper">
+      <div id="pixel-grid"></div>
     </div>
 
   </div>
 </div>
 
 <script>
-  const input = document.getElementById('binary-input');
-  const asciiOut = document.getElementById('ascii-output');
-  const canvas = document.getElementById('pixel-canvas');
-  const ctx = canvas.getContext('2d');
-  const imgWidthEl = document.getElementById('img-width');
-  const cellSizeEl = document.getElementById('cell-size');
+  const binaryEl    = document.getElementById('binary-input');
+  const asciiEl     = document.getElementById('ascii-textarea');
+  const gridWrapper = document.getElementById('pixel-grid-wrapper');
+  const grid        = document.getElementById('pixel-grid');
+  const imgWidthEl  = document.getElementById('img-width');
+  const imgHeightEl = document.getElementById('img-height');
+  const imgHeightLabel = document.getElementById('img-height-label');
+  const cellSizeEl  = document.getElementById('cell-size');
   const cellSizeVal = document.getElementById('cell-size-val');
-  const statBits = document.getElementById('stat-bits');
-  const statBytes = document.getElementById('stat-bytes');
-  const statComplete = document.getElementById('stat-complete');
+  const statBits    = document.getElementById('stat-bits');
+  const statBytes   = document.getElementById('stat-bytes');
+  const statComplete= document.getElementById('stat-complete');
+  const canvasHint  = document.getElementById('canvas-hint');
+  const modeHint    = document.getElementById('mode-hint');
 
-  function getBits() {
-    return input.value.replace(/[^01]/g, '');
-  }
+  let mode = 'receiving';
+  let bits = []; // canonical state in sending mode
 
-  function updateStats(bits) {
-    statBits.textContent = bits.length;
-    statBytes.textContent = (bits.length / 8).toFixed(2);
-    statComplete.textContent = Math.floor(bits.length / 8);
-  }
+  // ── Mode switching ────────────────────────────────────────────────────────
 
-  function updateAscii(bits) {
-    let text = '';
-    for (let i = 0; i + 8 <= bits.length; i += 8) {
-      const byte = bits.slice(i, i + 8);
-      const code = parseInt(byte, 2);
-      if (code >= 32 && code <= 126) {
-        text += String.fromCharCode(code);
-      } else if (code === 10 || code === 13) {
-        text += '\n';
-      } else {
-        text += '·';
-      }
+  function setMode(m) {
+    mode = m;
+    document.getElementById('btn-receiving').classList.toggle('active', m === 'receiving');
+    document.getElementById('btn-sending').classList.toggle('active', m === 'sending');
+
+    if (m === 'receiving') {
+      modeHint.textContent = 'Edit binary → see decoded output';
+      binaryEl.readOnly = false;
+      asciiEl.readOnly  = true;
+      gridWrapper.classList.remove('interactive');
+      canvasHint.textContent = '';
+      canvasHint.classList.remove('active');
+      imgHeightLabel.style.display = 'none';
+      renderFromBinary();
+    } else {
+      modeHint.textContent = 'Edit ASCII or click pixels → generates binary';
+      binaryEl.readOnly = true;
+      asciiEl.readOnly  = false;
+      gridWrapper.classList.add('interactive');
+      canvasHint.textContent = '— click to toggle pixels';
+      canvasHint.classList.add('active');
+      imgHeightLabel.style.display = '';
+      bits = binaryEl.value.replace(/[^01]/g, '').split('').map(Number);
+      resizeBitsToGrid();
+      renderFromBits();
     }
-    asciiOut.textContent = text || '—';
   }
 
-  function updatePixels(bits) {
+  function resizeBitsToGrid() {
+    const total = Math.max(1, parseInt(imgWidthEl.value) || 8) *
+                  Math.max(1, parseInt(imgHeightEl.value) || 8);
+    while (bits.length < total) bits.push(0);
+    if (bits.length > total) bits = bits.slice(0, total);
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  function updateStats(bitStr) {
+    statBits.textContent    = bitStr.length;
+    statBytes.textContent   = (bitStr.length / 8).toFixed(2);
+    statComplete.textContent= Math.floor(bitStr.length / 8);
+  }
+
+  function bitsToAscii(bitStr) {
+    let text = '';
+    for (let i = 0; i + 8 <= bitStr.length; i += 8) {
+      const code = parseInt(bitStr.slice(i, i + 8), 2);
+      if (code >= 32 && code <= 126) text += String.fromCharCode(code);
+      else if (code === 10 || code === 13) text += '\n';
+      else text += '·';
+    }
+    return text;
+  }
+
+  function asciiToBits(text) {
+    let out = '';
+    for (const ch of text) out += ch.charCodeAt(0).toString(2).padStart(8, '0');
+    return out;
+  }
+
+  function drawGrid(bitStr) {
     const cellSize = parseInt(cellSizeEl.value);
     const imgWidth = Math.max(1, parseInt(imgWidthEl.value) || 8);
+    const sz = cellSize + 'px';
 
-    if (bits.length === 0) {
-      canvas.width = 0;
-      canvas.height = 0;
-      return;
-    }
-
-    const rows = Math.ceil(bits.length / imgWidth);
-    canvas.width = imgWidth * cellSize;
-    canvas.height = rows * cellSize;
-
-    for (let i = 0; i < bits.length; i++) {
-      const col = i % imgWidth;
-      const row = Math.floor(i / imgWidth);
-      ctx.fillStyle = bits[i] === '1' ? '#ffffff' : '#000000';
-      ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-    }
-
-    // Fill remaining cells in last row with a dim color
-    const filled = bits.length;
+    const rows = mode === 'sending'
+      ? Math.max(1, parseInt(imgHeightEl.value) || 8)
+      : (bitStr.length === 0 ? 0 : Math.ceil(bitStr.length / imgWidth));
     const total = rows * imgWidth;
-    for (let i = filled; i < total; i++) {
-      const col = i % imgWidth;
-      const row = Math.floor(i / imgWidth);
-      ctx.fillStyle = '#1a1a2e';
-      ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+
+    // Reuse existing divs — only create/remove as needed
+    while (grid.children.length < total) {
+      const d = document.createElement('div');
+      d.className = 'pixel';
+      grid.appendChild(d);
+    }
+    while (grid.children.length > total) {
+      grid.removeChild(grid.lastChild);
+    }
+
+    grid.style.width = (imgWidth * cellSize) + 'px';
+
+    for (let i = 0; i < total; i++) {
+      const d = grid.children[i];
+      d.style.width  = sz;
+      d.style.height = sz;
+      if (i < bitStr.length) {
+        d.classList.remove('pad');
+        d.classList.toggle('on', bitStr[i] === '1');
+        d.dataset.idx = i;
+      } else {
+        d.classList.add('pad');
+        d.classList.remove('on');
+        d.removeAttribute('data-idx');
+      }
     }
   }
 
-  function update() {
-    const bits = getBits();
-    updateStats(bits);
-    updateAscii(bits);
-    updatePixels(bits);
+  // ── Receiving mode ────────────────────────────────────────────────────────
+
+  function renderFromBinary() {
+    const bitStr = binaryEl.value.replace(/[^01]/g, '');
+    updateStats(bitStr);
+    asciiEl.value = bitsToAscii(bitStr);
+    drawGrid(bitStr);
   }
 
-  // Strip non-binary characters on input
-  input.addEventListener('input', () => {
-    const sel = input.selectionStart;
-    const raw = input.value;
+  binaryEl.addEventListener('input', () => {
+    if (mode !== 'receiving') return;
+    const sel = binaryEl.selectionStart;
+    const raw = binaryEl.value;
     const clean = raw.replace(/[^01\n]/g, '');
     if (clean !== raw) {
-      const removed = raw.slice(0, sel).replace(/[^01\n]/g, '').length;
-      input.value = clean;
-      input.selectionStart = input.selectionEnd = removed;
+      binaryEl.value = clean;
+      binaryEl.selectionStart = binaryEl.selectionEnd =
+        raw.slice(0, sel).replace(/[^01\n]/g, '').length;
     }
-    update();
+    renderFromBinary();
   });
+
+  // ── Sending mode ──────────────────────────────────────────────────────────
+
+  function renderFromBits() {
+    const bitStr = bits.join('');
+    binaryEl.value = bitStr;
+    updateStats(bitStr);
+    asciiEl.value = bitsToAscii(bitStr);
+    drawGrid(bitStr);
+  }
+
+  asciiEl.addEventListener('input', () => {
+    if (mode !== 'sending') return;
+    const bitStr = asciiToBits(asciiEl.value);
+    bits = bitStr.split('').map(Number);
+    binaryEl.value = bitStr;
+    updateStats(bitStr);
+    drawGrid(bitStr);
+  });
+
+  let painting = false;
+  let paintValue = 0; // the value to write while dragging
+
+  function paintPixel(d) {
+    if (!d || d.classList.contains('pad')) return;
+    const idx = parseInt(d.dataset.idx);
+    if (bits[idx] === paintValue) return;
+    bits[idx] = paintValue;
+    d.classList.toggle('on', paintValue === 1);
+    const bitStr = bits.join('');
+    binaryEl.value = bitStr;
+    asciiEl.value = bitsToAscii(bitStr);
+    updateStats(bitStr);
+  }
+
+  grid.addEventListener('mousedown', (e) => {
+    if (mode !== 'sending') return;
+    const d = e.target.closest('.pixel:not(.pad)');
+    if (!d) return;
+    e.preventDefault(); // prevent text selection while dragging
+    painting = true;
+    const idx = parseInt(d.dataset.idx);
+    paintValue = bits[idx] === 1 ? 0 : 1; // opposite of what we clicked
+    paintPixel(d);
+  });
+
+  grid.addEventListener('mousemove', (e) => {
+    if (!painting || mode !== 'sending') return;
+    const d = e.target.closest('.pixel:not(.pad)');
+    if (d) paintPixel(d);
+  });
+
+  window.addEventListener('mouseup', () => { painting = false; });
+
+  // ── Controls ──────────────────────────────────────────────────────────────
 
   cellSizeEl.addEventListener('input', () => {
     cellSizeVal.textContent = cellSizeEl.value;
-    update();
+    redraw();
   });
 
-  imgWidthEl.addEventListener('input', update);
+  imgWidthEl.addEventListener('input', () => {
+    if (mode === 'sending') { resizeBitsToGrid(); renderFromBits(); }
+    else redraw();
+  });
 
-  update();
+  imgHeightEl.addEventListener('input', () => {
+    if (mode === 'sending') { resizeBitsToGrid(); renderFromBits(); }
+  });
+
+  function redraw() {
+    if (mode === 'receiving') renderFromBinary();
+    else drawGrid(bits.join(''));
+  }
+
+  setMode('receiving');
 </script>
 </body>
 </html>
