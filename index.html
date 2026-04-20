@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Binary Explorer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: monospace;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 12px 20px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #e94560;
+      letter-spacing: 2px;
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      gap: 0;
+    }
+
+    .panel {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .panel-left {
+      border-right: 2px solid #0f3460;
+    }
+
+    .label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #e94560;
+      margin-bottom: 4px;
+    }
+
+    textarea#binary-input {
+      width: 100%;
+      flex: 1;
+      min-height: 300px;
+      background: #0d0d1a;
+      color: #00ff88;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 1rem;
+      resize: vertical;
+      outline: none;
+      line-height: 1.6;
+    }
+
+    textarea#binary-input:focus {
+      border-color: #e94560;
+    }
+
+    .stats {
+      font-size: 0.75rem;
+      color: #666;
+    }
+
+    .stats span {
+      color: #00ff88;
+    }
+
+    /* ASCII output */
+    #ascii-output {
+      background: #0d0d1a;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      padding: 12px;
+      min-height: 80px;
+      word-break: break-all;
+      white-space: pre-wrap;
+      font-size: 1rem;
+      color: #f0c040;
+      line-height: 1.6;
+    }
+
+    /* Pixel grid */
+    .pixel-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .pixel-controls label {
+      font-size: 0.75rem;
+      color: #888;
+    }
+
+    .pixel-controls input[type=range] {
+      accent-color: #e94560;
+      width: 80px;
+    }
+
+    .pixel-controls input[type=number] {
+      background: #0d0d1a;
+      color: #e0e0e0;
+      border: 1px solid #0f3460;
+      border-radius: 3px;
+      padding: 2px 6px;
+      width: 56px;
+      font-family: monospace;
+      font-size: 0.85rem;
+    }
+
+    #pixel-canvas-wrapper {
+      background: #0d0d1a;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      padding: 8px;
+      overflow: auto;
+      flex: 1;
+      min-height: 120px;
+      display: flex;
+      align-items: flex-start;
+    }
+
+    #pixel-canvas {
+      image-rendering: pixelated;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+<header>BINARY EXPLORER</header>
+
+<div class="main">
+
+  <!-- LEFT: Binary Input -->
+  <div class="panel panel-left">
+    <div class="label">Binary Input</div>
+    <textarea
+      id="binary-input"
+      spellcheck="false"
+      placeholder="Type 0s and 1s here..."
+    ></textarea>
+    <div class="stats">
+      Bits: <span id="stat-bits">0</span> &nbsp;|&nbsp;
+      Bytes: <span id="stat-bytes">0</span> &nbsp;|&nbsp;
+      Complete bytes: <span id="stat-complete">0</span>
+    </div>
+  </div>
+
+  <!-- RIGHT: Outputs -->
+  <div class="panel panel-right">
+
+    <!-- ASCII -->
+    <div class="label">ASCII Text (8 bits per character)</div>
+    <div id="ascii-output"></div>
+
+    <!-- Pixel image -->
+    <div class="label">Pixel Image</div>
+    <div class="pixel-controls">
+      <label>Width (px):
+        <input type="number" id="img-width" value="8" min="1" max="512">
+      </label>
+      <label>Cell size:
+        <input type="range" id="cell-size" min="2" max="32" value="12">
+        <span id="cell-size-val">12</span>px
+      </label>
+    </div>
+    <div id="pixel-canvas-wrapper">
+      <canvas id="pixel-canvas"></canvas>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const input = document.getElementById('binary-input');
+  const asciiOut = document.getElementById('ascii-output');
+  const canvas = document.getElementById('pixel-canvas');
+  const ctx = canvas.getContext('2d');
+  const imgWidthEl = document.getElementById('img-width');
+  const cellSizeEl = document.getElementById('cell-size');
+  const cellSizeVal = document.getElementById('cell-size-val');
+  const statBits = document.getElementById('stat-bits');
+  const statBytes = document.getElementById('stat-bytes');
+  const statComplete = document.getElementById('stat-complete');
+
+  function getBits() {
+    return input.value.replace(/[^01]/g, '');
+  }
+
+  function updateStats(bits) {
+    statBits.textContent = bits.length;
+    statBytes.textContent = (bits.length / 8).toFixed(2);
+    statComplete.textContent = Math.floor(bits.length / 8);
+  }
+
+  function updateAscii(bits) {
+    let text = '';
+    for (let i = 0; i + 8 <= bits.length; i += 8) {
+      const byte = bits.slice(i, i + 8);
+      const code = parseInt(byte, 2);
+      if (code >= 32 && code <= 126) {
+        text += String.fromCharCode(code);
+      } else if (code === 10 || code === 13) {
+        text += '\n';
+      } else {
+        text += '·';
+      }
+    }
+    asciiOut.textContent = text || '—';
+  }
+
+  function updatePixels(bits) {
+    const cellSize = parseInt(cellSizeEl.value);
+    const imgWidth = Math.max(1, parseInt(imgWidthEl.value) || 8);
+
+    if (bits.length === 0) {
+      canvas.width = 0;
+      canvas.height = 0;
+      return;
+    }
+
+    const rows = Math.ceil(bits.length / imgWidth);
+    canvas.width = imgWidth * cellSize;
+    canvas.height = rows * cellSize;
+
+    for (let i = 0; i < bits.length; i++) {
+      const col = i % imgWidth;
+      const row = Math.floor(i / imgWidth);
+      ctx.fillStyle = bits[i] === '1' ? '#ffffff' : '#000000';
+      ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+    }
+
+    // Fill remaining cells in last row with a dim color
+    const filled = bits.length;
+    const total = rows * imgWidth;
+    for (let i = filled; i < total; i++) {
+      const col = i % imgWidth;
+      const row = Math.floor(i / imgWidth);
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+    }
+  }
+
+  function update() {
+    const bits = getBits();
+    updateStats(bits);
+    updateAscii(bits);
+    updatePixels(bits);
+  }
+
+  // Strip non-binary characters on input
+  input.addEventListener('input', () => {
+    const sel = input.selectionStart;
+    const raw = input.value;
+    const clean = raw.replace(/[^01\n]/g, '');
+    if (clean !== raw) {
+      const removed = raw.slice(0, sel).replace(/[^01\n]/g, '').length;
+      input.value = clean;
+      input.selectionStart = input.selectionEnd = removed;
+    }
+    update();
+  });
+
+  cellSizeEl.addEventListener('input', () => {
+    cellSizeVal.textContent = cellSizeEl.value;
+    update();
+  });
+
+  imgWidthEl.addEventListener('input', update);
+
+  update();
+</script>
+</body>
+</html>
