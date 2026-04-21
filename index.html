@@ -188,6 +188,127 @@
       transition: color 0.2s;
     }
     .canvas-hint.active { color: #e94560; }
+
+    /* Playback controls */
+    .play-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #play-btn {
+      padding: 5px 16px;
+      background: #e94560;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 0.85rem;
+      letter-spacing: 1px;
+      transition: background 0.15s;
+    }
+    #play-btn:hover { background: #c73050; }
+    #play-btn.playing { background: #333; border: 1px solid #e94560; color: #e94560; }
+    #play-btn:disabled { opacity: 0.35; cursor: default; }
+
+    .play-controls label { font-size: 0.75rem; color: #888; }
+    .play-controls input[type=range] { accent-color: #e94560; width: 80px; }
+    .play-controls input[type=number] {
+      background: #0d0d1a;
+      color: #e0e0e0;
+      border: 1px solid #0f3460;
+      border-radius: 3px;
+      padding: 2px 6px;
+      width: 56px;
+      font-family: monospace;
+      font-size: 0.85rem;
+    }
+
+    .play-controls select {
+      background: #0d0d1a;
+      color: #e0e0e0;
+      border: 1px solid #0f3460;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-family: monospace;
+      font-size: 0.8rem;
+    }
+
+    .pixel.current-byte {
+      outline: 2px solid #e94560;
+      outline-offset: -1px;
+      z-index: 1;
+      position: relative;
+    }
+
+    /* Audio sequence */
+    #audio-seq-wrapper {
+      background: #0d0d1a;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      padding: 8px;
+      height: 150px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      transition: border-color 0.2s;
+    }
+
+    #audio-seq-wrapper.interactive { border-color: #e94560; }
+
+    #audio-seq {
+      display: flex;
+      align-items: stretch;
+      height: 100%;
+      gap: 2px;
+    }
+
+    .note-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 22px;
+      flex-shrink: 0;
+    }
+
+    .note-col input[type=range] {
+      -webkit-appearance: slider-vertical;
+      appearance: slider-vertical;
+      writing-mode: vertical-lr;
+      direction: rtl;
+      width: 22px;
+      flex: 1;
+      accent-color: #e94560;
+      margin: 0;
+      padding: 0;
+      cursor: ns-resize;
+    }
+
+    .note-col input[type=range]:disabled { cursor: default; }
+
+    .note-col.current {
+      background: rgba(0, 255, 136, 0.12);
+      border-radius: 3px;
+      outline: 1px solid #00ff88;
+    }
+
+    .note-col input[type=range] { accent-color: #e94560; }
+    .note-col.silent input[type=range] { accent-color: #444; }
+    .note-col.current input[type=range] { accent-color: #00ff88; }
+
+    .note-col .note-label {
+      font-size: 0.55rem;
+      color: #666;
+      margin-top: 4px;
+      text-align: center;
+      line-height: 1;
+      width: 22px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .note-col.current .note-label { color: #00ff88; }
   </style>
 </head>
 <body>
@@ -240,6 +361,30 @@
       <div id="pixel-grid"></div>
     </div>
 
+    <div class="label">
+      Audio Sequence (0 = silence · 1 = C3 · 13 = C4 · 25 = C5)
+      <span class="canvas-hint" id="audio-hint">&nbsp;</span>
+    </div>
+    <div class="play-controls">
+      <button id="play-btn" disabled onclick="togglePlayback()">▶ PLAY</button>
+      <label id="num-notes-label">Notes:
+        <input type="number" id="num-notes" value="8" min="1" max="512">
+      </label>
+      <label>Speed:
+        <input type="range" id="note-speed" min="30" max="600" value="180" step="10">
+        <span id="note-speed-val">180</span>ms/note
+      </label>
+      <select id="wave-type">
+        <option value="sine">sine</option>
+        <option value="triangle" selected>triangle</option>
+        <option value="square">square</option>
+        <option value="sawtooth">sawtooth</option>
+      </select>
+    </div>
+    <div id="audio-seq-wrapper">
+      <div id="audio-seq"></div>
+    </div>
+
   </div>
 </div>
 
@@ -258,9 +403,24 @@
   const statComplete= document.getElementById('stat-complete');
   const canvasHint  = document.getElementById('canvas-hint');
   const modeHint    = document.getElementById('mode-hint');
+  const audioSeqWrapper = document.getElementById('audio-seq-wrapper');
+  const audioSeq    = document.getElementById('audio-seq');
+  const audioHint   = document.getElementById('audio-hint');
+  const numNotesEl  = document.getElementById('num-notes');
+  const numNotesLabel = document.getElementById('num-notes-label');
 
   let mode = 'receiving';
   let bits = []; // canonical state in sending mode
+
+  // Byte (0–255) → slider value (0–25). 0 = silence, 1 = C3 (MIDI 48), 25 = C5 (MIDI 72)
+  function byteToNote(byte) { return byte % 26; }
+  function noteValueToMidi(v) { return v === 0 ? null : 47 + v; }
+  function noteName(v) {
+    if (v === 0) return '·';
+    const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const midi = 47 + v;
+    return names[midi % 12] + (Math.floor(midi / 12) - 1);
+  }
 
   // ── Mode switching ────────────────────────────────────────────────────────
 
@@ -276,18 +436,27 @@
       gridWrapper.classList.remove('interactive');
       canvasHint.textContent = '';
       canvasHint.classList.remove('active');
+      audioSeqWrapper.classList.remove('interactive');
+      audioHint.textContent = '';
+      audioHint.classList.remove('active');
       imgHeightLabel.style.display = 'none';
+      numNotesLabel.style.display = 'none';
       renderFromBinary();
     } else {
-      modeHint.textContent = 'Edit ASCII or click pixels → generates binary';
+      modeHint.textContent = 'Edit ASCII, pixels, or note sliders → generates binary';
       binaryEl.readOnly = true;
       asciiEl.readOnly  = false;
       gridWrapper.classList.add('interactive');
       canvasHint.textContent = '— click to toggle pixels';
       canvasHint.classList.add('active');
+      audioSeqWrapper.classList.add('interactive');
+      audioHint.textContent = '— drag sliders to compose';
+      audioHint.classList.add('active');
       imgHeightLabel.style.display = '';
+      numNotesLabel.style.display = '';
       bits = binaryEl.value.replace(/[^01]/g, '').split('').map(Number);
       resizeBitsToGrid();
+      numNotesEl.value = Math.floor(bits.length / 8);
       renderFromBits();
     }
   }
@@ -295,6 +464,12 @@
   function resizeBitsToGrid() {
     const total = Math.max(1, parseInt(imgWidthEl.value) || 8) *
                   Math.max(1, parseInt(imgHeightEl.value) || 8);
+    while (bits.length < total) bits.push(0);
+    if (bits.length > total) bits = bits.slice(0, total);
+  }
+
+  function resizeBitsToNotes() {
+    const total = Math.max(1, parseInt(numNotesEl.value) || 8) * 8;
     while (bits.length < total) bits.push(0);
     if (bits.length > total) bits = bits.slice(0, total);
   }
@@ -362,6 +537,69 @@
     }
   }
 
+  // ── Audio sequence (one slider per complete byte) ─────────────────────────
+
+  function setByteValue(byteIdx, byteValue) {
+    const bitStr = byteValue.toString(2).padStart(8, '0');
+    for (let i = 0; i < 8; i++) bits[byteIdx * 8 + i] = parseInt(bitStr[i]);
+    const full = bits.join('');
+    binaryEl.value = full;
+    asciiEl.value = bitsToAscii(full);
+    updateStats(full);
+    drawGrid(full);
+    updatePlayBtnState();
+  }
+
+  function createNoteCol(idx) {
+    const col = document.createElement('div');
+    col.className = 'note-col';
+
+    const s = document.createElement('input');
+    s.type = 'range';
+    s.min = '0';
+    s.max = '25';
+    s.step = '1';
+    s.value = '0';
+    s.setAttribute('orient', 'vertical');
+    s.addEventListener('input', () => {
+      if (mode !== 'sending') return;
+      if (isPlaying) stopPlayback();
+      const v = parseInt(s.value);
+      col.classList.toggle('silent', v === 0);
+      const position = Array.prototype.indexOf.call(audioSeq.children, col);
+      setByteValue(position, v);
+      col.querySelector('.note-label').textContent = noteName(v);
+    });
+    col.appendChild(s);
+
+    const label = document.createElement('div');
+    label.className = 'note-label';
+    label.textContent = '·';
+    col.appendChild(label);
+
+    return col;
+  }
+
+  function drawAudioSequence() {
+    const bytes = getCurrentBytes();
+    const sending = mode === 'sending';
+    while (audioSeq.children.length < bytes.length) {
+      audioSeq.appendChild(createNoteCol(audioSeq.children.length));
+    }
+    while (audioSeq.children.length > bytes.length) {
+      audioSeq.removeChild(audioSeq.lastChild);
+    }
+    for (let i = 0; i < bytes.length; i++) {
+      const col = audioSeq.children[i];
+      const slider = col.querySelector('input');
+      const v = byteToNote(bytes[i]);
+      if (parseInt(slider.value) !== v) slider.value = v;
+      slider.disabled = !sending;
+      col.classList.toggle('silent', v === 0);
+      col.querySelector('.note-label').textContent = noteName(v);
+    }
+  }
+
   // ── Receiving mode ────────────────────────────────────────────────────────
 
   function renderFromBinary() {
@@ -369,6 +607,8 @@
     updateStats(bitStr);
     asciiEl.value = bitsToAscii(bitStr);
     drawGrid(bitStr);
+    drawAudioSequence();
+    updatePlayBtnState();
   }
 
   binaryEl.addEventListener('input', () => {
@@ -392,6 +632,8 @@
     updateStats(bitStr);
     asciiEl.value = bitsToAscii(bitStr);
     drawGrid(bitStr);
+    drawAudioSequence();
+    updatePlayBtnState();
   }
 
   asciiEl.addEventListener('input', () => {
@@ -401,6 +643,8 @@
     binaryEl.value = bitStr;
     updateStats(bitStr);
     drawGrid(bitStr);
+    drawAudioSequence();
+    updatePlayBtnState();
   });
 
   let painting = false;
@@ -416,6 +660,8 @@
     binaryEl.value = bitStr;
     asciiEl.value = bitsToAscii(bitStr);
     updateStats(bitStr);
+    drawAudioSequence();
+    updatePlayBtnState();
   }
 
   grid.addEventListener('mousedown', (e) => {
@@ -453,12 +699,154 @@
     if (mode === 'sending') { resizeBitsToGrid(); renderFromBits(); }
   });
 
+  numNotesEl.addEventListener('input', () => {
+    if (mode !== 'sending') return;
+    if (isPlaying) stopPlayback();
+    resizeBitsToNotes();
+    renderFromBits();
+  });
+
   function redraw() {
     if (mode === 'receiving') renderFromBinary();
     else drawGrid(bits.join(''));
   }
 
+  // ── Audio playback ────────────────────────────────────────────────────────
+
+  const playBtn       = document.getElementById('play-btn');
+  const noteSpeedEl   = document.getElementById('note-speed');
+  const noteSpeedVal  = document.getElementById('note-speed-val');
+  const waveTypeEl    = document.getElementById('wave-type');
+
+  let audioCtx        = null;
+  let playbackNodes   = [];
+  let playTimers      = [];
+  let isPlaying       = false;
+
+  noteSpeedEl.addEventListener('input', () => {
+    noteSpeedVal.textContent = noteSpeedEl.value;
+  });
+
   setMode('receiving');
+
+  function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  function midiToFreq(note) {
+    return 440 * Math.pow(2, (note - 69) / 12);
+  }
+
+  function getCurrentBytes() {
+    const bitStr = (mode === 'receiving'
+      ? binaryEl.value.replace(/[^01]/g, '')
+      : bits.join(''));
+    const bytes = [];
+    for (let i = 0; i + 8 <= bitStr.length; i += 8)
+      bytes.push(parseInt(bitStr.slice(i, i + 8), 2));
+    return bytes;
+  }
+
+  function updatePlayBtn() {
+    playBtn.textContent = isPlaying ? '■ STOP' : '▶ PLAY';
+    playBtn.classList.toggle('playing', isPlaying);
+  }
+
+  function clearHighlight() {
+    document.querySelectorAll('.pixel.current-byte')
+      .forEach(p => p.classList.remove('current-byte'));
+    document.querySelectorAll('.note-col.current')
+      .forEach(c => c.classList.remove('current'));
+  }
+
+  function highlightByte(byteIdx) {
+    clearHighlight();
+    for (let j = 0; j < 8; j++) {
+      const el = grid.children[byteIdx * 8 + j];
+      if (el && !el.classList.contains('pad')) el.classList.add('current-byte');
+    }
+    const col = audioSeq.children[byteIdx];
+    if (col) col.classList.add('current');
+  }
+
+  function stopPlayback() {
+    playbackNodes.forEach(n => { try { n.stop(0); } catch (_) {} });
+    playbackNodes = [];
+    playTimers.forEach(t => clearTimeout(t));
+    playTimers = [];
+    isPlaying = false;
+    clearHighlight();
+    updatePlayBtn();
+  }
+
+  function startPlayback() {
+    const bytes = getCurrentBytes();
+    if (!bytes.length) return;
+
+    const ctx         = getAudioCtx();
+    const msDuration  = parseInt(noteSpeedEl.value);
+    const secDuration = msDuration / 1000;
+    const wave        = waveTypeEl.value;
+    const startTime   = ctx.currentTime + 0.02;
+
+    isPlaying = true;
+    updatePlayBtn();
+
+    bytes.forEach((byte, i) => {
+      const noteVal = byteToNote(byte);
+      const midi    = noteValueToMidi(noteVal);
+      const t       = startTime + i * secDuration;
+
+      if (midi !== null) {
+        const freq    = midiToFreq(midi);
+        const attack  = Math.min(0.01, secDuration * 0.1);
+        const release = Math.min(secDuration * 0.85, secDuration - attack);
+
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.type            = wave;
+        osc.frequency.value = freq;
+        const peakGain = wave === 'sine' ? 0.75 : 0.25;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(peakGain, t + attack);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + release);
+
+        osc.start(t);
+        osc.stop(t + secDuration);
+        playbackNodes.push(osc);
+      }
+
+      const delay = (t - ctx.currentTime) * 1000;
+      playTimers.push(setTimeout(() => {
+        if (!isPlaying) return;
+        highlightByte(i);
+      }, delay));
+    });
+
+    const total = startTime + bytes.length * secDuration - ctx.currentTime;
+    playTimers.push(setTimeout(stopPlayback, total * 1000 + 100));
+  }
+
+  function togglePlayback() {
+    if (isPlaying) stopPlayback();
+    else startPlayback();
+  }
+
+  // Enable/disable play button based on whether there are complete bytes
+  function updatePlayBtnState() {
+    const bytes = getCurrentBytes();
+    playBtn.disabled = bytes.length === 0;
+  }
+
+  // Stop playback if binary changes while playing
+  binaryEl.addEventListener('input', () => { if (isPlaying) stopPlayback(); });
+  asciiEl.addEventListener('input',  () => { if (isPlaying) stopPlayback(); });
+
 </script>
+
 </body>
 </html>
