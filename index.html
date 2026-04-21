@@ -362,7 +362,7 @@
     </div>
 
     <div class="label">
-      Audio Sequence (0 = silence · 1 = C3 · 13 = C4 · 25 = C5)
+      Audio Sequence (a = silence · b = C3 · n = C4 · z = C5)
       <span class="canvas-hint" id="audio-hint">&nbsp;</span>
     </div>
     <div class="play-controls">
@@ -412,15 +412,10 @@
   let mode = 'receiving';
   let bits = []; // canonical state in sending mode
 
-  // Byte (0–255) → slider value (0–25). 0 = silence, 1 = C3 (MIDI 48), 25 = C5 (MIDI 72)
-  function byteToNote(byte) { return byte % 26; }
+  // Byte (0–255) → slider value (0–25). 'a' (97) = silence, 'b' (98) = C3, 'z' (122) = C5
+  function byteToNote(byte) { return (byte >= 97 && byte <= 122) ? byte - 97 : 0; }
   function noteValueToMidi(v) { return v === 0 ? null : 47 + v; }
-  function noteName(v) {
-    if (v === 0) return '·';
-    const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-    const midi = 47 + v;
-    return names[midi % 12] + (Math.floor(midi / 12) - 1);
-  }
+  function noteName(v) { return String.fromCharCode(97 + v); }
 
   // ── Mode switching ────────────────────────────────────────────────────────
 
@@ -567,7 +562,7 @@
       const v = parseInt(s.value);
       col.classList.toggle('silent', v === 0);
       const position = Array.prototype.indexOf.call(audioSeq.children, col);
-      setByteValue(position, v);
+      setByteValue(position, v + 97);
       col.querySelector('.note-label').textContent = noteName(v);
     });
     col.appendChild(s);
