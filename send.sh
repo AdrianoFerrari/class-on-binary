@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 BASE="192.168.0"
 PORT=5000
-MY_IP=$(ip -4 addr show enp8s0 | awk '/inet/{print $2}' | cut -d/ -f1)
+MY_IP=$(hostname -I | awk '{print $1}')
 
 echo "Network: $BASE.x  |  My IP: $MY_IP"
 echo "For each message, enter the destination (last 3 digits) and your binary message."
