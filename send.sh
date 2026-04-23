@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
-DEST="${1:-10.0.0.2}"
+BASE="192.168.0"
 PORT=5000
 MY_IP=$(ip -4 addr show enp8s0 | awk '/inet/{print $2}' | cut -d/ -f1)
 
-echo "Sending to $DEST as $MY_IP. Type 0s and 1s, then Enter. Ctrl+C to quit."
+echo "Network: $BASE.x  |  My IP: $MY_IP"
+echo "For each message, enter the destination (last 3 digits) and your binary message."
+echo "Ctrl+C to quit."
 echo ""
 
 while true; do
+    read -rp "to (last 3 digits)> " octet
+    [[ -z "$octet" ]] && continue
+    if [[ ! "$octet" =~ ^[0-9]{1,3}$ ]] || (( octet < 1 || octet > 254 )); then
+        echo "  (enter the last 3 digits, 1-254)"
+        continue
+    fi
+    DEST="$BASE.$octet"
+
     read -rp "send> " msg
     [[ -z "$msg" ]] && continue
     if [[ ! "$msg" =~ ^[01]+$ ]]; then
