@@ -5,7 +5,6 @@ MY_IP=$(hostname -I | awk '{print $1}')
 
 echo "Network: $BASE.x  |  My IP: $MY_IP"
 echo "For each message, enter the destination (last 3 digits) and your binary message."
-echo "Ctrl+C to quit."
 echo ""
 
 while true; do
